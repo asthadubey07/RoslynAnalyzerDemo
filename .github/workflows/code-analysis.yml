@@ -1,4 +1,4 @@
-name: Code Analysis
+name: Roslyn Analyzer CI
 
 on:
   pull_request:
@@ -8,59 +8,56 @@ on:
 jobs:
   analyze:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout Code
+    
+      - name: 📥 Checkout code
         uses: actions/checkout@v4
         with:
-          fetch-depth: 0  # ✅ Fetch full history to allow git diff
+          fetch-depth: 0  # Ensures all branches are fetched for diff comparison
 
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
+      - name: 🛠️ Setup .NET
+        uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
 
-      - name: Restore Dependencies
-        run: dotnet restore
-
-      - name: Fetch Main Branch (Ensure Comparison Works)
-        run: git fetch origin main --depth=1
-
-      - name: Get Changed C# Files
-        id: changed_files
+      - name: 🔄 Fetch Main Branch
         run: |
-          # Get the list of changed .cs files in the PR
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' || true)
+          git fetch origin main || git fetch origin main:main  # Ensures origin/main exists
 
-          # If no C# files were modified, skip analysis
+      - name: 🔍 Get Changed C# Files
+        id: changed-files
+        run: |
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
           if [[ -z "$CHANGED_FILES" ]]; then
-            echo "✅ No C# files changed, skipping analysis."
+            echo "No C# files changed. Skipping analysis."
             exit 0
           fi
-
-          echo "🔍 Analyzing changed C# files:"
-          echo "$CHANGED_FILES"
-
-          # Save the list of changed files as an environment variable
+          echo "Changed files: $CHANGED_FILES"
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
 
-      - name: Run Roslyn Code Analysis (Only PR Files)
-        if: env.CHANGED_FILES != ''
+      - name: 🛠️ Restore Dependencies
+        run: dotnet restore
+
+      - name: 🔎 Run Roslyn Analyzers
         run: |
-          # Run code analysis only on changed files
-          for file in $CHANGED_FILES; do
-            dotnet build --no-restore /warnaserror /p:TreatWarningsAsErrors=true /p:EnableNETAnalyzers=true "$file" || true
-          done
+          if [[ -z "$CHANGED_FILES" ]]; then
+            echo "No C# files to analyze."
+            exit 0
+          fi
+          dotnet build --no-restore /warnaserror
 
-      - name: Upload Roslyn Analysis Results
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: Roslyn-Analysis-Results
-          path: |
-            **/bin/**/*.dll
-            **/bin/**/*.pdb
+      - name: ✅ Remove Deprecated FxCopAnalyzers
+        run: |
+          dotnet remove package Microsoft.CodeAnalysis.FxCopAnalyzers || true
+          dotnet add package Microsoft.CodeAnalysis.NetAnalyzers --version latest
 
-      - name: Report Analysis Results
-        if: failure()
-        run: echo "❌ Roslyn Code Analysis failed. Please fix the issues before merging."
+      - name: 🔄 Commit Analyzer Fixes (if any)
+        run: |
+          if git diff --quiet; then
+            echo "No changes to commit."
+          else
+            git config --global user.name 'github-actions[bot]'
+            git config --global user.email 'github-actions@github.com'
+            git commit -am "Replace FxCopAnalyzers with .NET Analyzers"
+            git push
+          fi
