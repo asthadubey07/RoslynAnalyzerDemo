@@ -1,4 +1,4 @@
-<Project Sdk="Microsoft.NET.Sdk.Web">
+﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>
@@ -6,20 +6,17 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 	<PropertyGroup>
-	<TargetFramework>net8.0</TargetFramework>
-	<Nullable>enable</Nullable>
-	<!-- Enables null reference checking -->
-	<AnalysisLevel>latest</AnalysisLevel>
-	<!-- Uses the latest Roslyn analysis rules -->
-	<EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
-	<!-- Enforce coding styles -->
+		<EnableNETAnalyzers>true</EnableNETAnalyzers>
+		<AnalysisMode>AllEnabledByDefault</AnalysisMode>
 	</PropertyGroup>
+	<ItemGroup>
+	  <Compile Remove="demoScript.cs" />
+	</ItemGroup>
+	<ItemGroup>
+	  <None Include="demoScript.cs" />
+	</ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.FxCopAnalyzers" Version="3.3.2">
-      <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
-      <PrivateAssets>all</PrivateAssets>
-    </PackageReference>
     <PackageReference Include="Microsoft.CodeAnalysis.NetAnalyzers" Version="9.0.0">
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
       <PrivateAssets>all</PrivateAssets>
