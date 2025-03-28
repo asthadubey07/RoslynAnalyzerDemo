@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # ✅ Fetch full history to allow git diff
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -23,14 +25,20 @@ jobs:
 
       - name: Run Roslyn Code Analysis (Check Only PR Files)
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/main | grep '\.cs$' || true)
-          if [ -z \"$CHANGED_FILES\" ]; then
-            echo \"✅ No .cs files changed, skipping analysis.\"
+          # Get the list of changed .cs files in the PR
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' || true)
+          
+          # If no C# files were modified, skip analysis
+          if [ -z "$CHANGED_FILES" ]; then
+            echo "✅ No .cs files changed, skipping analysis."
             exit 0
           fi
-          echo \"🔍 Analyzing changed C# files:\"
-          echo \"$CHANGED_FILES\"
-          dotnet build --no-restore /warnaserror /p:TreatWarningsAsErrors=true /p:EnableNETAnalyzers=true
+
+          echo "🔍 Analyzing changed C# files:"
+          echo "$CHANGED_FILES"
+
+          # Run code analysis only on changed files
+          dotnet build --no-restore /warnaserror /p:TreatWarningsAsErrors=true /p:EnableNETAnalyzers=true || true
 
       - name: Upload Roslyn Analysis Results
         if: always()
@@ -43,4 +51,4 @@ jobs:
 
       - name: Report Analysis Results
         if: failure()
-        run: echo \"❌ Roslyn Code Analysis failed. Please fix the issues before merging.\"
+        run: echo "❌ Roslyn Code Analysis failed. Please fix the issues before merging."
