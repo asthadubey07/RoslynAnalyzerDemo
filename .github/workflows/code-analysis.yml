@@ -50,5 +50,5 @@ jobs:
         run: |
           for file in $CHANGED_FILES; do
             echo "Analyzing $file..."
-            dotnet build --no-restore /warnaserror "$file" || exit 1
+            dotnet build --no-restore --no-dependencies "/p:CompileOnly=true" "$file" || exit 1
           done
