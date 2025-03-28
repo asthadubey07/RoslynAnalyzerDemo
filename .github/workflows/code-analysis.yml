@@ -23,22 +23,34 @@ jobs:
       - name: Restore Dependencies
         run: dotnet restore
 
-      - name: Run Roslyn Code Analysis (Check Only PR Files)
+      - name: Fetch Main Branch (Ensure Comparison Works)
+        run: git fetch origin main --depth=1
+
+      - name: Get Changed C# Files
+        id: changed_files
         run: |
           # Get the list of changed .cs files in the PR
           CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' || true)
-          
+
           # If no C# files were modified, skip analysis
-          if [ -z "$CHANGED_FILES" ]; then
-            echo "✅ No .cs files changed, skipping analysis."
+          if [[ -z "$CHANGED_FILES" ]]; then
+            echo "✅ No C# files changed, skipping analysis."
             exit 0
           fi
 
           echo "🔍 Analyzing changed C# files:"
           echo "$CHANGED_FILES"
 
+          # Save the list of changed files as an environment variable
+          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+
+      - name: Run Roslyn Code Analysis (Only PR Files)
+        if: env.CHANGED_FILES != ''
+        run: |
           # Run code analysis only on changed files
-          dotnet build --no-restore /warnaserror /p:TreatWarningsAsErrors=true /p:EnableNETAnalyzers=true || true
+          for file in $CHANGED_FILES; do
+            dotnet build --no-restore /warnaserror /p:TreatWarningsAsErrors=true /p:EnableNETAnalyzers=true "$file" || true
+          done
 
       - name: Upload Roslyn Analysis Results
         if: always()
