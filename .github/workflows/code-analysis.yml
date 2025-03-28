@@ -21,8 +21,7 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: 🔄 Fetch Main Branch
-        run: |
-          git fetch origin main || git fetch origin main:main  # Ensures origin/main exists
+        run: git fetch --prune --unshallow  # Ensures full fetch
 
       - name: 🔍 Get Changed C# Files
         id: changed-files
@@ -48,7 +47,5 @@ jobs:
 
       - name: 🔎 Run Roslyn Analyzers on Changed Files
         run: |
-          for file in $CHANGED_FILES; do
-            echo "Analyzing $file..."
-            dotnet build --no-restore --no-dependencies "/p:CompileOnly=true" "$file" || exit 1
-          done
+          echo "Running Roslyn analyzers on the entire project (required for correct analysis)"
+          dotnet build --no-restore --warnaserror
