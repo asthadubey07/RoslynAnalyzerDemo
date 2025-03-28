@@ -38,13 +38,16 @@ jobs:
       - name: 🛠️ Restore Dependencies
         run: dotnet restore
 
-      - name: 🔎 Run Roslyn Analyzers
+      - name: 🔎 Run Roslyn Analyzers on Changed Files
         run: |
           if [[ -z "$CHANGED_FILES" ]]; then
             echo "No C# files to analyze."
             exit 0
           fi
-          dotnet build --no-restore /warnaserror
+          for file in $CHANGED_FILES; do
+            echo "Analyzing $file..."
+            dotnet build --no-restore /warnaserror "$file" || exit 1
+          done
 
       - name: ✅ Remove Deprecated FxCopAnalyzers
         run: |
