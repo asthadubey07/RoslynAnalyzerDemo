@@ -30,37 +30,25 @@ jobs:
           CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
           if [[ -z "$CHANGED_FILES" ]]; then
             echo "No C# files changed. Skipping analysis."
-            exit 0
+            echo "skip_check=true" >> $GITHUB_ENV
+          else
+            echo "Changed files: $CHANGED_FILES"
+            echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+            echo "skip_check=false" >> $GITHUB_ENV
           fi
-          echo "Changed files: $CHANGED_FILES"
-          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+
+      - name: 🚫 Skip if No C# Files Changed
+        if: env.skip_check == 'true'
+        run: |
+          echo "No C# files changed. Exiting workflow."
+          exit 0
 
       - name: 🛠️ Restore Dependencies
         run: dotnet restore
 
       - name: 🔎 Run Roslyn Analyzers on Changed Files
         run: |
-          if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No C# files to analyze."
-            exit 0
-          fi
           for file in $CHANGED_FILES; do
             echo "Analyzing $file..."
             dotnet build --no-restore /warnaserror "$file" || exit 1
           done
-
-      - name: ✅ Remove Deprecated FxCopAnalyzers
-        run: |
-          dotnet remove package Microsoft.CodeAnalysis.FxCopAnalyzers || true
-          dotnet add package Microsoft.CodeAnalysis.NetAnalyzers --version latest
-
-      - name: 🔄 Commit Analyzer Fixes (if any)
-        run: |
-          if git diff --quiet; then
-            echo "No changes to commit."
-          else
-            git config --global user.name 'github-actions[bot]'
-            git config --global user.email 'github-actions@github.com'
-            git commit -am "Replace FxCopAnalyzers with .NET Analyzers"
-            git push
-          fi
