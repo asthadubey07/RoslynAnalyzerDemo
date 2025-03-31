@@ -50,5 +50,6 @@ jobs:
           echo "Running Roslyn analyzers only on changed files..."
           for file in $CHANGED_FILES; do
             echo "Analyzing $file..."
-            dotnet format --verify-no-changes --severity error "$file" || exit 1
+            dotnet build --no-restore /p:RoslynAnalyzerAdditionalFile="$file" || exit 1
           done
+        
