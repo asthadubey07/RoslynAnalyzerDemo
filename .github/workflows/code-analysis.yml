@@ -11,6 +11,8 @@ jobs:
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # Ensure we have enough history for git diff
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -18,11 +20,16 @@ jobs:
           dotnet-version: '8.0.x'
 
       - name: Fetch Changed Files
+        id: changed-files
         run: |
           git fetch origin main
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
+          CHANGED_FILES=$(git diff --name-only origin/main HEAD -- '*.cs' | grep -Ev '^obj/' || true)
           echo "Changed files: $CHANGED_FILES"
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+
+      - name: Debug Changed Files
+        run: |
+          echo "Files detected: $CHANGED_FILES"
 
       - name: Run Analysis on Changed Files
         if: env.CHANGED_FILES != ''
