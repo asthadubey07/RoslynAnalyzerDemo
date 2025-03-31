@@ -9,7 +9,7 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-    
+
       - name: 📥 Checkout code
         uses: actions/checkout@v4
         with:
@@ -48,8 +48,4 @@ jobs:
       - name: 🔎 Run Roslyn Analyzers on Changed Files
         run: |
           echo "Running Roslyn analyzers only on changed files..."
-          for file in $CHANGED_FILES; do
-            echo "Analyzing $file..."
-            dotnet build --no-restore /p:RoslynAnalyzerAdditionalFile="$file" || exit 1
-          done
-        
+          dotnet format --verify-no-changes --severity error --include $(echo $CHANGED_FILES | tr '\n' ' ') || exit 1
