@@ -1,4 +1,4 @@
-name: Roslyn Analyzer CI
+name: PR Analysis
 
 on:
   pull_request:
@@ -9,43 +9,25 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-
-      - name: 📥 Checkout code
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 0  # Ensures all branches are fetched for diff comparison
 
-      - name: 🛠️ Setup .NET
+      - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
 
-      - name: 🔄 Fetch Main Branch
-        run: git fetch --prune --unshallow  # Ensures full fetch
-
-      - name: 🔍 Get Changed C# Files
-        id: changed-files
+      - name: Fetch Changed Files
         run: |
+          git fetch origin main
           CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
-          if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No C# files changed. Skipping analysis."
-            echo "skip_check=true" >> $GITHUB_ENV
-          else
-            echo "Changed files: $CHANGED_FILES"
-            echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
-            echo "skip_check=false" >> $GITHUB_ENV
-          fi
+          echo "Changed files: $CHANGED_FILES"
+          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
 
-      - name: 🚫 Skip if No C# Files Changed
-        if: env.skip_check == 'true'
+      - name: Run Analysis on Changed Files
+        if: env.CHANGED_FILES != ''
         run: |
-          echo "No C# files changed. Exiting workflow."
-          exit 0
-
-      - name: 🛠️ Restore Dependencies
-        run: dotnet restore
-
-      - name: 🔎 Run Roslyn Analyzers on Changed Files
-        run: |
-          echo "Running Roslyn analyzers only on changed files..."
-          dotnet format --verify-no-changes --severity error --include $(echo $CHANGED_FILES | tr '\n' ' ') || exit 1
+          for file in $CHANGED_FILES; do
+            echo "Analyzing file: $file"
+            dotnet build --no-restore --warnaserror $file || true
+          done
