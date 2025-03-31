@@ -1,55 +1,64 @@
-name: Build Changed C# Files
+name: PR Code Analysis with Roslyn
 
 on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
-  build:
+  roslyn-analysis:
+    name: Run Roslyn Analyzer on PR Files
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v3
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
-          fetch-depth: 0
+          fetch-depth: 2 # Ensures we can compare the PR branch with the base branch
 
-      - name: Fetch Changed C# Files
-        id: changed-files
-        run: |
-          git fetch origin main || git fetch origin main:main
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
-          echo "Changed files: $CHANGED_FILES"
-          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
-
-      - name: Debug Changed Files
-        run: |
-          echo "Changed C# files:" $CHANGED_FILES
-
-      - name: Find Affected Projects
-        id: affected-projects
-        run: |
-          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} find . -path "{}/" -name '*.csproj' | sort -u || true)
-          echo "Affected projects: $AFFECTED_PROJECTS"
-          echo "AFFECTED_PROJECTS=$AFFECTED_PROJECTS" >> $GITHUB_ENV
-
-      - name: Debug Affected Projects
-        run: |
-          echo "Affected projects:" $AFFECTED_PROJECTS
-
-      - name: Setup .NET
+      - name: Install .NET SDK
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '6.0.x' # Adjust to your project version
+          dotnet-version: '8.0.x' # Adjust based on your project requirements
 
-      - name: Restore Dependencies
-        run: dotnet restore
-
-      - name: Build Affected Projects
-        if: env.AFFECTED_PROJECTS != ''
+      - name: Identify modified C# files in PR
+        id: changed-files
         run: |
-          for project in $AFFECTED_PROJECTS; do
-            echo "Building project: $project"
-            dotnet build --no-restore --warnaserror "$project" || exit 1
+          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.cs' | grep -v 'obj/' || true)
+          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
+          echo "Changed C# Files:"
+          echo "$CHANGED_FILES"
+
+      - name: Fail if no C# files were changed
+        if: env.CHANGED_FILES == ''
+        run: |
+          echo "No C# files were changed in this PR. Skipping Roslyn Analysis."
+          exit 0
+
+      - name: Find Affected .csproj Files
+        id: affected-projects
+        run: |
+          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} find {} -maxdepth 1 -name '*.csproj' || true)
+          echo "AFFECTED_PROJECTS=$AFFECTED_PROJECTS" >> $GITHUB_ENV
+          echo "Affected .csproj Files:"
+          echo "$AFFECTED_PROJECTS"
+
+      - name: Fail if no affected projects found
+        if: env.AFFECTED_PROJECTS == ''
+        run: |
+          echo "No affected projects found. Skipping build and analysis."
+          exit 0
+
+      - name: Restore dependencies for affected projects
+        run: |
+          for proj in $AFFECTED_PROJECTS; do
+            dotnet restore "$proj"
+          done
+
+      - name: Build affected projects with Roslyn Analyzers (Only PR Files)
+        run: |
+          for proj in $AFFECTED_PROJECTS; do
+            echo "Running analysis on project: $proj"
+            dotnet build "$proj" /p:RunAnalyzers=true /p:TreatWarningsAsErrors=true /p:AnalysisMode=CurrentFiles
           done
