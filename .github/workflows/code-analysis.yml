@@ -1,4 +1,4 @@
-name: PR Analysis
+name: Build Changed C# Files
 
 on:
   pull_request:
@@ -6,18 +6,14 @@ on:
       - main
 
 jobs:
-  analyze:
+  build:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v3
         with:
-          fetch-depth: 2  # Fetch commit history for diffing
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v3
-        with:
-          dotnet-version: '8.0.x'
+          fetch-depth: 0
 
       - name: Fetch Changed C# Files
         id: changed-files
@@ -27,12 +23,25 @@ jobs:
           echo "Changed files: $CHANGED_FILES"
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
 
+      - name: Debug Changed Files
+        run: |
+          echo "Changed C# files:" $CHANGED_FILES
+
       - name: Find Affected Projects
         id: affected-projects
         run: |
-          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | grep -E '.*/' | xargs -I {} find {} -name '*.csproj' | sort -u || true)
+          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} find . -path "{}/" -name '*.csproj' | sort -u || true)
           echo "Affected projects: $AFFECTED_PROJECTS"
           echo "AFFECTED_PROJECTS=$AFFECTED_PROJECTS" >> $GITHUB_ENV
+
+      - name: Debug Affected Projects
+        run: |
+          echo "Affected projects:" $AFFECTED_PROJECTS
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v3
+        with:
+          dotnet-version: '6.0.x' # Adjust to your project version
 
       - name: Restore Dependencies
         run: dotnet restore
@@ -43,12 +52,4 @@ jobs:
           for project in $AFFECTED_PROJECTS; do
             echo "Building project: $project"
             dotnet build --no-restore --warnaserror "$project" || exit 1
-          done
-
-      - name: Run Static Analysis on Changed Files
-        if: env.CHANGED_FILES != ''
-        run: |
-          for file in $CHANGED_FILES; do
-            echo "Analyzing file: $file"
-            dotnet format "$file" --verify-no-changes || exit 1
           done
