@@ -47,5 +47,8 @@ jobs:
 
       - name: 🔎 Run Roslyn Analyzers on Changed Files
         run: |
-          echo "Running Roslyn analyzers on the entire project (required for correct analysis)"
-          dotnet build --no-restore --warnaserror
+          echo "Running Roslyn analyzers only on changed files..."
+          for file in $CHANGED_FILES; do
+            echo "Analyzing $file..."
+            dotnet format --verify-no-changes --severity error "$file" || exit 1
+          done
