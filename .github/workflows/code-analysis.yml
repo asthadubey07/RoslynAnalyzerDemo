@@ -1,51 +1,48 @@
-name: Static Code Analysis
+name: CI - Roslyn Analyzers
 
 on:
   pull_request:
     branches:
       - main
+      - develop
 
 jobs:
-  analyze-code:
-    name: Analyze Changed C# Files
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'  # Adjust according to your project version
+          dotnet-version: 8.0.x
 
-      - name: Identify Modified C# Files
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Find Changed C# Files
         id: changed-files
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
-          
+          CHANGED_FILES=$(git diff --name-only ${{ github.event.pull_request.base.sha }} ${{ github.sha }} -- '*.cs')
           if [[ -z "$CHANGED_FILES" ]]; then
-            echo "No C# files modified. Skipping analysis."
+            echo "No C# files changed. Skipping build."
             exit 0
           fi
-          
-          echo "$CHANGED_FILES" > changed_files.txt
+          echo "Changed files: $CHANGED_FILES"
 
-      - name: Find Related .csproj Files
-        id: changed-projects
+      - name: Find Project Files
+        id: find-projects
         run: |
-          CHANGED_PROJECTS=$(cat changed_files.txt | xargs -I {} dirname {} | sort -u | xargs -I {} find {} -name "*.csproj" || true)
-          
-          if [[ -z "$CHANGED_PROJECTS" ]]; then
-            echo "No C# project files found. Skipping build."
+          PROJECT_FILES=$(echo "$CHANGED_FILES" | xargs -n1 dirname | sort -u | xargs -n1 find . -name '*.csproj')
+          if [[ -z "$PROJECT_FILES" ]]; then
+            echo "No project files found. Skipping build."
             exit 0
           fi
-          
-          echo "$CHANGED_PROJECTS" > changed_projects.txt
+          echo "Projects to build: $PROJECT_FILES"
 
-      - name: Restore Dependencies for Affected Projects
+      - name: Build with Roslyn Analyzers
         run: |
-          cat changed_projects.txt | xargs -I {} dotnet restore {}
-
-      - name: Run Build with Analyzers for Affected Projects
-        run: |
-          cat changed_projects.txt | xargs -I {} dotnet build {} --no-restore --warnaserror
+          for proj in $PROJECT_FILES; do
+            dotnet build "$proj" --configuration Debug --warnaserror
+          done
