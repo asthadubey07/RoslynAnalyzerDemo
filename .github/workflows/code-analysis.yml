@@ -1,64 +1,51 @@
-name: PR Code Analysis with Roslyn
+name: Static Code Analysis
 
 on:
   pull_request:
     branches:
       - main
-      - develop
 
 jobs:
-  roslyn-analysis:
-    name: Run Roslyn Analyzer on PR Files
+  analyze-code:
+    name: Analyze Changed C# Files
     runs-on: ubuntu-latest
-
     steps:
-      - name: Checkout repository
+      - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2 # Ensures we can compare the PR branch with the base branch
 
-      - name: Install .NET SDK
+      - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
-          dotnet-version: '8.0.x' # Adjust based on your project requirements
+          dotnet-version: '8.0.x'  # Adjust according to your project version
 
-      - name: Identify modified C# files in PR
+      - name: Identify Modified C# Files
         id: changed-files
         run: |
-          CHANGED_FILES=$(git diff --name-only origin/${{ github.base_ref }}...HEAD -- '*.cs' | grep -v 'obj/' || true)
-          echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
-          echo "Changed C# Files:"
-          echo "$CHANGED_FILES"
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
+          
+          if [[ -z "$CHANGED_FILES" ]]; then
+            echo "No C# files modified. Skipping analysis."
+            exit 0
+          fi
+          
+          echo "$CHANGED_FILES" > changed_files.txt
 
-      - name: Fail if no C# files were changed
-        if: env.CHANGED_FILES == ''
+      - name: Find Related .csproj Files
+        id: changed-projects
         run: |
-          echo "No C# files were changed in this PR. Skipping Roslyn Analysis."
-          exit 0
+          CHANGED_PROJECTS=$(cat changed_files.txt | xargs -I {} dirname {} | sort -u | xargs -I {} find {} -name "*.csproj" || true)
+          
+          if [[ -z "$CHANGED_PROJECTS" ]]; then
+            echo "No C# project files found. Skipping build."
+            exit 0
+          fi
+          
+          echo "$CHANGED_PROJECTS" > changed_projects.txt
 
-      - name: Find Affected .csproj Files
-        id: affected-projects
+      - name: Restore Dependencies for Affected Projects
         run: |
-          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | xargs -I {} find {} -maxdepth 1 -name '*.csproj' || true)
-          echo "AFFECTED_PROJECTS=$AFFECTED_PROJECTS" >> $GITHUB_ENV
-          echo "Affected .csproj Files:"
-          echo "$AFFECTED_PROJECTS"
+          cat changed_projects.txt | xargs -I {} dotnet restore {}
 
-      - name: Fail if no affected projects found
-        if: env.AFFECTED_PROJECTS == ''
+      - name: Run Build with Analyzers for Affected Projects
         run: |
-          echo "No affected projects found. Skipping build and analysis."
-          exit 0
-
-      - name: Restore dependencies for affected projects
-        run: |
-          for proj in $AFFECTED_PROJECTS; do
-            dotnet restore "$proj"
-          done
-
-      - name: Build affected projects with Roslyn Analyzers (Only PR Files)
-        run: |
-          for proj in $AFFECTED_PROJECTS; do
-            echo "Running analysis on project: $proj"
-            dotnet build "$proj" /p:RunAnalyzers=true /p:TreatWarningsAsErrors=true /p:AnalysisMode=CurrentFiles
-          done
+          cat changed_projects.txt | xargs -I {} dotnet build {} --no-restore --warnaserror
