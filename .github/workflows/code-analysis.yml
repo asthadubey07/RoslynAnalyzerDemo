@@ -12,7 +12,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Ensure we have enough history for git diff
+          fetch-depth: 2  # Ensure history for git diff
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
@@ -31,10 +31,10 @@ jobs:
         run: |
           echo "Files detected: $CHANGED_FILES"
 
-      - name: Run Analysis on Changed Files
+      - name: Compile Only Changed Files
         if: env.CHANGED_FILES != ''
         run: |
           for file in $CHANGED_FILES; do
-            echo "Analyzing file: $file"
-            dotnet build --no-restore --warnaserror $file || true
+            echo "Building file: $file"
+            dotnet build --no-restore --warnaserror "$file" || exit 1
           done
