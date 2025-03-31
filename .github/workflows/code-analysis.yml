@@ -12,29 +12,43 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v4
         with:
-          fetch-depth: 2  # Ensure history for git diff
+          fetch-depth: 2  # Fetch commit history for diffing
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v3
         with:
           dotnet-version: '8.0.x'
 
-      - name: Fetch Changed Files
+      - name: Fetch Changed C# Files
         id: changed-files
         run: |
-          git fetch origin main
-          CHANGED_FILES=$(git diff --name-only origin/main HEAD -- '*.cs' | grep -Ev '^obj/' || true)
+          git fetch origin main || git fetch origin main:main
+          CHANGED_FILES=$(git diff --name-only origin/main...HEAD -- '*.cs' | grep -Ev '^obj/' || true)
           echo "Changed files: $CHANGED_FILES"
           echo "CHANGED_FILES=$CHANGED_FILES" >> $GITHUB_ENV
 
-      - name: Debug Changed Files
+      - name: Find Affected Projects
+        id: affected-projects
         run: |
-          echo "Files detected: $CHANGED_FILES"
+          AFFECTED_PROJECTS=$(echo "$CHANGED_FILES" | xargs -I {} dirname {} | sort -u | grep -E '.*/' | xargs -I {} find {} -name '*.csproj' | sort -u || true)
+          echo "Affected projects: $AFFECTED_PROJECTS"
+          echo "AFFECTED_PROJECTS=$AFFECTED_PROJECTS" >> $GITHUB_ENV
 
-      - name: Compile Only Changed Files
+      - name: Restore Dependencies
+        run: dotnet restore
+
+      - name: Build Affected Projects
+        if: env.AFFECTED_PROJECTS != ''
+        run: |
+          for project in $AFFECTED_PROJECTS; do
+            echo "Building project: $project"
+            dotnet build --no-restore --warnaserror "$project" || exit 1
+          done
+
+      - name: Run Static Analysis on Changed Files
         if: env.CHANGED_FILES != ''
         run: |
           for file in $CHANGED_FILES; do
-            echo "Building file: $file"
-            dotnet build --no-restore --warnaserror "$file" || exit 1
+            echo "Analyzing file: $file"
+            dotnet format "$file" --verify-no-changes || exit 1
           done
