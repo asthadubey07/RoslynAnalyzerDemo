@@ -10,16 +10,4 @@ namespace RoslynAnalyzerDemo
 
         public string? Summary { get; set; }
     }
-
-    public class Demo
-    {
-        private string _unusedField; // Unused field (warning)
-
-        public void NullReferenceIssue()
-        {
-            string? possibleNull = null;
-            string nonNullable = possibleNull; // CS8600 Error (null to non-nullable)
-            Console.WriteLine(nonNullable);
-        }
-    }
     }
